@@ -4,7 +4,7 @@ const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 })
 
-const MODEL = 'claude-opus-4-6' as const
+const MODEL = 'claude-sonnet-4-20250514' as const
 
 interface CompletionOpts {
   system: string
