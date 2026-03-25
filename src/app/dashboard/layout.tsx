@@ -6,24 +6,35 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-
-  // Try to get user profile for display name
+  let userEmail: string | null = null
   let userName: string | null = null
-  if (user) {
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('full_name')
-      .eq('id', user.id)
-      .single<{ full_name: string }>()
 
-    userName = profile?.full_name || user.user_metadata?.full_name as string || null
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    userEmail = user?.email || null
+
+    if (user) {
+      try {
+        const { data: profile } = await supabase
+          .from('user_profiles')
+          .select('full_name')
+          .eq('id', user.id)
+          .single<{ full_name: string }>()
+
+        userName = profile?.full_name || user.user_metadata?.full_name as string || null
+      } catch {
+        userName = user.user_metadata?.full_name as string || null
+      }
+    }
+  } catch (err) {
+    console.error('Dashboard layout error:', err)
   }
 
   return (
     <DashboardShell
-      userEmail={user?.email || null}
+      userEmail={userEmail}
       userName={userName}
     >
       {children}
