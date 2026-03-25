@@ -268,38 +268,85 @@ export default function ImportPage() {
       if (records.length > 0) batches.push(records)
     }
 
+    // Fetch all existing emails for dedup check
+    const allEmails = batches.flat().map(r => r.email as string).filter(Boolean)
+    const existingEmails = new Set<string>()
+
+    // Check in chunks of 500 to avoid URL length limits
+    for (let i = 0; i < allEmails.length; i += 500) {
+      const chunk = allEmails.slice(i, i + 500)
+      const { data: existing } = await supabase
+        .from('contacts')
+        .select('email')
+        .in('email', chunk)
+
+      if (existing) {
+        for (const row of existing as { email: string }[]) {
+          if (row.email) existingEmails.add(row.email.toLowerCase())
+        }
+      }
+    }
+
     // Process batches
     for (let i = 0; i < batches.length; i++) {
       const batch = batches[i]
 
-      try {
-        if (dupAction === 'update') {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { data, error } = await (supabase.from('contacts') as any)
-            .upsert(batch, { onConflict: 'email', ignoreDuplicates: false })
-            .select('id')
+      // Split batch into new vs existing
+      const newRecords: Record<string, unknown>[] = []
+      const updateRecords: Record<string, unknown>[] = []
 
-          if (error) {
-            importResult.errors.push(`Batch ${i + 1}: ${error.message}`)
+      for (const record of batch) {
+        const email = (record.email as string || '').toLowerCase()
+        if (existingEmails.has(email)) {
+          if (dupAction === 'update') {
+            updateRecords.push(record)
           } else {
-            importResult.inserted += (data?.length || 0)
+            importResult.skipped++
           }
         } else {
-          // Skip duplicates
+          newRecords.push(record)
+        }
+      }
+
+      // Insert new records
+      if (newRecords.length > 0) {
+        try {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const { data, error } = await (supabase.from('contacts') as any)
-            .upsert(batch, { onConflict: 'email', ignoreDuplicates: true })
+            .insert(newRecords)
             .select('id')
 
           if (error) {
-            importResult.errors.push(`Batch ${i + 1}: ${error.message}`)
+            importResult.errors.push(`Batch ${i + 1} insert: ${error.message}`)
           } else {
             importResult.inserted += (data?.length || 0)
-            importResult.skipped += batch.length - (data?.length || 0)
+          }
+        } catch (err) {
+          importResult.errors.push(`Batch ${i + 1} insert: ${(err as Error).message}`)
+        }
+      }
+
+      // Update existing records
+      if (updateRecords.length > 0) {
+        for (const record of updateRecords) {
+          try {
+            const email = record.email as string
+            const updateData = { ...record }
+            delete updateData.email // don't update the email itself
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const { error } = await (supabase.from('contacts') as any)
+              .update(updateData)
+              .eq('email', email)
+
+            if (error) {
+              importResult.errors.push(`Update ${email}: ${error.message}`)
+            } else {
+              importResult.updated++
+            }
+          } catch (err) {
+            importResult.errors.push(`Update: ${(err as Error).message}`)
           }
         }
-      } catch (err) {
-        importResult.errors.push(`Batch ${i + 1}: ${(err as Error).message}`)
       }
 
       setProgress(Math.round(((i + 1) / batches.length) * 100))
@@ -523,7 +570,11 @@ export default function ImportPage() {
             <div className="mt-4 flex items-center justify-center gap-6 text-sm">
               <div>
                 <p className="text-2xl font-bold text-emerald-600">{result.inserted}</p>
-                <p className="text-[#6B7280]">Imported</p>
+                <p className="text-[#6B7280]">New</p>
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-blue-500">{result.updated}</p>
+                <p className="text-[#6B7280]">Updated</p>
               </div>
               <div>
                 <p className="text-2xl font-bold text-amber-500">{result.skipped}</p>
