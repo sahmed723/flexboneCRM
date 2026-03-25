@@ -8,12 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "migrate": "npx tsx src/scripts/migrate.ts",
-    "cf:build": "npx opennextjs-cloudflare build",
-    "cf:dev": "npx opennextjs-cloudflare preview",
-    "cf:deploy": "npx opennextjs-cloudflare deploy",
-    "pages:build": "npx opennextjs-cloudflare build",
-    "pages:dev": "npx opennextjs-cloudflare preview",
-    "pages:deploy": "npx opennextjs-cloudflare deploy"
+    "vercel:build": "next build"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",

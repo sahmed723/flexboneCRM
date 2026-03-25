@@ -1,11 +1,6 @@
 import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
-  // Skip lint during build (lint separately in CI)
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-
   // Skip type checking during build (check separately in CI)
   typescript: {
     ignoreBuildErrors: true,
