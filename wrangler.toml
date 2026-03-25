@@ -13,11 +13,12 @@ enabled = true
 enabled = true
 invocation_logs = true
 
-# Environment variables are set in the Cloudflare dashboard.
-# Do NOT hardcode secrets here.
-#
-# Required vars:
-#   NEXT_PUBLIC_SUPABASE_URL
-#   NEXT_PUBLIC_SUPABASE_ANON_KEY
-#   SUPABASE_SERVICE_ROLE_KEY
-#   ANTHROPIC_API_KEY
+# Public (non-secret) environment variables
+[vars]
+NEXT_PUBLIC_SUPABASE_URL = "https://bdhrzoicuijcotutrsck.supabase.co"
+NEXT_PUBLIC_SUPABASE_ANON_KEY = "sb_publishable_7I4LTYWqDYkDp7ajpgvJsQ_sGiuoa7Q"
+
+# Secrets (SUPABASE_SERVICE_ROLE_KEY, ANTHROPIC_API_KEY) must be set via:
+#   - Cloudflare dashboard: Settings → Variables and Secrets
+#   - Or CLI: npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY
+#   - For local dev: add them to .dev.vars (already gitignored)
