@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import { Settings, User, Users, Download, Upload, Key, Bell, Database } from 'lucide-react'
+import { Settings, User, Users, Download, Upload, Key, Bell, Database, Sparkles, FileSpreadsheet } from 'lucide-react'
 import { ExportContactsButton, ExportCompaniesButton } from '@/components/settings/export-buttons'
 
 export const runtime = 'edge'
@@ -107,12 +107,51 @@ export default async function SettingsPage() {
           <div className="flex items-center justify-between rounded-lg border border-[#E5E5E5] p-4">
             <div>
               <p className="text-sm font-medium text-[#374151]">Import Data</p>
-              <p className="text-xs text-[#9CA3AF]">Upload contacts via Excel or CSV file</p>
+              <p className="text-xs text-[#9CA3AF]">Upload contacts via CSV file (Apollo compatible)</p>
             </div>
-            <button className="flex items-center gap-1.5 rounded-md border border-[#E5E5E5] px-3 py-1.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-colors">
+            <Link
+              href="/dashboard/import"
+              className="flex items-center gap-1.5 rounded-md border border-[#E5E5E5] px-3 py-1.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-colors"
+            >
               <Upload className="h-3.5 w-3.5" />
               Import
-            </button>
+            </Link>
+          </div>
+          <div className="flex items-center justify-between rounded-lg border border-[#E5E5E5] p-4">
+            <div>
+              <p className="text-sm font-medium text-[#374151]">Export History</p>
+              <p className="text-xs text-[#9CA3AF]">View past exports and which contacts were included</p>
+            </div>
+            <Link
+              href="/dashboard/settings/exports"
+              className="flex items-center gap-1.5 rounded-md border border-[#E5E5E5] px-3 py-1.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-colors"
+            >
+              <FileSpreadsheet className="h-3.5 w-3.5" />
+              View History
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* AI Enrichment Settings */}
+      <section className="rounded-lg border border-[#E5E5E5] bg-white shadow-sm">
+        <div className="flex items-center gap-2 border-b border-[#F0F0F0] px-5 py-3.5">
+          <Sparkles className="h-4 w-4 text-[#6B7280]" />
+          <h2 className="text-sm font-semibold text-[#374151]">AI Enrichment</h2>
+        </div>
+        <div className="p-5">
+          <div className="flex items-center justify-between rounded-lg border border-[#E5E5E5] p-4">
+            <div>
+              <p className="text-sm font-medium text-[#374151]">Enrichment Prompts & Model</p>
+              <p className="text-xs text-[#9CA3AF]">Edit AI prompts, change model, test enrichment output</p>
+            </div>
+            <Link
+              href="/dashboard/settings/enrichment"
+              className="flex items-center gap-1.5 rounded-md border border-[#E5E5E5] px-3 py-1.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-colors"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              Configure
+            </Link>
           </div>
         </div>
       </section>

@@ -63,7 +63,7 @@ function KanbanSkeleton() {
   )
 }
 
-async function ContactsTableContent({ filters }: { filters: ContactFilters }) {
+async function ContactsTableContent({ filters, filterParams }: { filters: ContactFilters; filterParams: string }) {
   const supabase = await createClient()
   const { data, count } = await fetchContacts(supabase, filters)
   return (
@@ -72,6 +72,7 @@ async function ContactsTableContent({ filters }: { filters: ContactFilters }) {
       totalCount={count}
       page={filters.page || 1}
       perPage={filters.perPage || 50}
+      filterParams={filterParams}
     />
   )
 }
@@ -97,6 +98,7 @@ export default async function ContactsPage({ searchParams }: PageProps) {
 
   const filters: ContactFilters = {
     search: typeof params.search === 'string' ? params.search : undefined,
+    titleSearch: typeof params.titleSearch === 'string' ? params.titleSearch : undefined,
     stages: typeof params.stages === 'string' ? params.stages.split(',').filter(Boolean) : undefined,
     categories: typeof params.categories === 'string' ? params.categories.split(',').filter(Boolean) : undefined,
     sources: typeof params.sources === 'string' ? params.sources.split(',').filter(Boolean) : undefined,
@@ -105,6 +107,9 @@ export default async function ContactsPage({ searchParams }: PageProps) {
     campaignBatch: typeof params.campaignBatch === 'string' ? params.campaignBatch : undefined,
     hasEmail: (params.hasEmail as 'yes' | 'no' | 'all') || undefined,
     hasLinkedin: (params.hasLinkedin as 'yes' | 'no' | 'all') || undefined,
+    contactedStatus: (params.contactedStatus as 'all' | 'not_contacted' | 'contacted' | 'exported') || undefined,
+    sizeMin: typeof params.sizeMin === 'string' ? Number(params.sizeMin) : undefined,
+    sizeMax: typeof params.sizeMax === 'string' ? Number(params.sizeMax) : undefined,
     dateImportedFrom: typeof params.dateImportedFrom === 'string' ? params.dateImportedFrom : undefined,
     dateImportedTo: typeof params.dateImportedTo === 'string' ? params.dateImportedTo : undefined,
     lastContactedFrom: typeof params.lastContactedFrom === 'string' ? params.lastContactedFrom : undefined,
@@ -155,7 +160,7 @@ export default async function ContactsPage({ searchParams }: PageProps) {
           {/* Table */}
           <div className="flex-1 min-w-0">
             <Suspense fallback={<TableSkeleton />}>
-              <ContactsTableContent filters={filters} />
+              <ContactsTableContent filters={filters} filterParams={new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([, v]) => typeof v === 'string') as [string, string][])).toString()} />
             </Suspense>
           </div>
         </div>

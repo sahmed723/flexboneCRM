@@ -21,6 +21,7 @@
 # cloudflare
 .vercel/
 .wrangler/
+.open-next/
 .dev.vars
 
 # misc

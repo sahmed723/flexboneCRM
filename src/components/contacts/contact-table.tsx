@@ -31,6 +31,22 @@ import { exportToCSV } from '@/lib/export-csv'
 import { toast } from 'sonner'
 import type { ContactListRow } from '@/lib/queries/contacts'
 
+const INSTANTLY_COLUMNS = [
+  { key: 'first_name', label: 'first_name' },
+  { key: 'last_name', label: 'last_name' },
+  { key: 'email', label: 'email' },
+  { key: 'phone', label: 'phone' },
+  { key: 'company_name', label: 'company_name' },
+  { key: 'title', label: 'title' },
+  { key: 'website', label: 'website' },
+  { key: 'city', label: 'city' },
+  { key: 'state', label: 'state' },
+  { key: 'company_size', label: 'employee_count' },
+  { key: 'flexbone_category', label: 'flexbone_category' },
+  { key: 'ehr', label: 'ehr_system' },
+  { key: 'linkedin', label: 'linkedin_url' },
+]
+
 const STAGES = [
   { value: 'new', label: 'New', color: 'bg-slate-100 text-slate-700' },
   { value: 'contacted', label: 'Contacted', color: 'bg-blue-100 text-blue-700' },
@@ -48,6 +64,25 @@ interface ContactTableProps {
   totalCount: number
   page: number
   perPage: number
+  filterParams?: string
+}
+
+function toInstantlyRow(r: ContactListRow) {
+  return {
+    first_name: r.first_name || '',
+    last_name: r.last_name || '',
+    email: r.email || '',
+    phone: r.phone || '',
+    company_name: r.company_name || '',
+    title: r.title || '',
+    website: '',
+    city: '',
+    state: '',
+    company_size: r.company_size?.toString() || '',
+    flexbone_category: r.flexbone_category || '',
+    ehr: '',
+    linkedin: r.linkedin || '',
+  }
 }
 
 function InlineStageSelect({ contactId, currentStage }: { contactId: string; currentStage: string }) {
@@ -79,7 +114,7 @@ function InlineStageSelect({ contactId, currentStage }: { contactId: string; cur
   )
 }
 
-export function ContactTable({ data, totalCount, page, perPage }: ContactTableProps) {
+export function ContactTable({ data, totalCount, page, perPage, filterParams }: ContactTableProps) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -249,9 +284,170 @@ export function ContactTable({ data, totalCount, page, perPage }: ContactTablePr
   })
 
   const selectedCount = Object.keys(rowSelection).length
+  const [exporting, setExporting] = useState(false)
+  const [selectAllFiltered, setSelectAllFiltered] = useState(false)
+
+  // Export selected rows with Instantly-compatible headers
+  const exportSelected = () => {
+    const selectedRows = data.filter((r) => rowSelection[r.id])
+    if (selectedRows.length === 0) return
+    const exportData = selectedRows.map(toInstantlyRow)
+    exportToCSV(exportData, 'flexbone_export', INSTANTLY_COLUMNS)
+    toast.success(`Exported ${selectedRows.length} contacts`)
+  }
+
+  // Export ALL filtered contacts (not just current page)
+  const exportAllFiltered = async () => {
+    setExporting(true)
+    try {
+      const supabase = createClient()
+
+      // Build the same query as the server but fetch all results
+      let query = supabase
+        .from('contacts')
+        .select('id, first_name, last_name, title, email, phone, stage, flexbone_category, source, linkedin, company_id, companies!contacts_company_id_fkey(company_name, company_size, website, city, state, ehr)')
+        .order('last_name')
+        .limit(50000)
+
+      // Re-apply current URL filters
+      const params = new URLSearchParams(filterParams || '')
+
+      if (params.get('search')) {
+        const term = `%${params.get('search')}%`
+        query = query.or(`first_name.ilike.${term},last_name.ilike.${term},email.ilike.${term},title.ilike.${term}`)
+      }
+      if (params.get('titleSearch')) {
+        query = query.ilike('title', `%${params.get('titleSearch')}%`)
+      }
+      if (params.get('stages')) {
+        query = query.in('stage', params.get('stages')!.split(','))
+      }
+      if (params.get('categories')) {
+        query = query.in('flexbone_category', params.get('categories')!.split(','))
+      }
+      if (params.get('sources')) {
+        query = query.in('source', params.get('sources')!.split(','))
+      }
+      if (params.get('priorityTier') && params.get('priorityTier') !== 'all') {
+        query = query.eq('priority_tier', params.get('priorityTier')!)
+      }
+      if (params.get('owner')) {
+        query = query.eq('owner', params.get('owner')!)
+      }
+      if (params.get('hasEmail') === 'yes') {
+        query = query.not('email', 'is', null)
+      } else if (params.get('hasEmail') === 'no') {
+        query = query.is('email', null)
+      }
+      if (params.get('contactedStatus') === 'not_contacted') {
+        query = query.eq('stage', 'new').is('last_contacted_date', null)
+      } else if (params.get('contactedStatus') === 'contacted') {
+        query = query.not('last_contacted_date', 'is', null)
+      }
+
+      const { data: allData, error } = await query
+      if (error) throw error
+      if (!allData || allData.length === 0) {
+        toast.error('No contacts match current filters')
+        return
+      }
+
+      const exportData = (allData as Record<string, unknown>[]).map((row) => {
+        const co = row.companies as { company_name: string; company_size: number | null; website: string | null; city: string | null; state: string | null; ehr: string | null } | null
+        return {
+          first_name: String(row.first_name || ''),
+          last_name: String(row.last_name || ''),
+          email: String(row.email || ''),
+          phone: String(row.phone || ''),
+          company_name: co?.company_name || '',
+          title: String(row.title || ''),
+          website: co?.website || '',
+          city: co?.city || '',
+          state: co?.state || '',
+          company_size: co?.company_size?.toString() || '',
+          flexbone_category: String(row.flexbone_category || ''),
+          ehr: co?.ehr || '',
+          linkedin: String(row.linkedin || ''),
+        }
+      })
+
+      const filename = `flexbone_export`
+      exportToCSV(exportData, filename, INSTANTLY_COLUMNS)
+
+      // Log export to campaign_exports table
+      const contactIds = (allData as { id: string }[]).map(r => r.id)
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase.from('campaign_exports') as any).insert({
+          filter_snapshot: Object.fromEntries(params.entries()),
+          contact_count: contactIds.length,
+          filename: `${filename}-${new Date().toISOString().slice(0, 10)}.csv`,
+          contact_ids: contactIds,
+        })
+
+        // Mark exported contacts with last_contacted_date if they haven't been contacted
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase.from('contacts') as any)
+          .update({ stage: 'contacted', last_contacted_date: new Date().toISOString() })
+          .in('id', contactIds)
+          .eq('stage', 'new')
+      } catch {
+        // Non-critical — export still succeeded
+      }
+
+      toast.success(`Exported ${exportData.length.toLocaleString()} contacts`)
+    } catch (err) {
+      toast.error('Export failed')
+      console.error(err)
+    } finally {
+      setExporting(false)
+    }
+  }
 
   return (
     <div className="space-y-3">
+      {/* Export bar — always visible */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {selectedCount > 0 && (
+            <span className="text-sm font-medium text-[#374151]">{selectedCount} selected</span>
+          )}
+          {selectedCount > 0 && selectedCount === data.length && !selectAllFiltered && totalCount > perPage && (
+            <button
+              onClick={() => setSelectAllFiltered(true)}
+              className="text-sm text-blue-600 hover:underline"
+            >
+              Select all {totalCount.toLocaleString()} matching contacts
+            </button>
+          )}
+          {selectAllFiltered && (
+            <>
+              <span className="text-sm font-medium text-blue-600">All {totalCount.toLocaleString()} contacts selected</span>
+              <button onClick={() => { setSelectAllFiltered(false); setRowSelection({}) }} className="text-sm text-[#6B7280] hover:underline">Clear</button>
+            </>
+          )}
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 gap-1.5 text-sm"
+          disabled={exporting}
+          onClick={selectAllFiltered || selectedCount === 0 ? exportAllFiltered : exportSelected}
+        >
+          {exporting ? (
+            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+          ) : (
+            <Download className="h-3.5 w-3.5" />
+          )}
+          {selectAllFiltered
+            ? `Export All ${totalCount.toLocaleString()}`
+            : selectedCount > 0
+              ? `Export ${selectedCount} Selected`
+              : `Export All Filtered (${totalCount.toLocaleString()})`
+          }
+        </Button>
+      </div>
+
       {/* Bulk actions */}
       {selectedCount > 0 && (
         <div className="flex items-center gap-3 rounded-lg bg-[#F5C518]/10 border border-[#F5C518]/30 px-4 py-2.5">
@@ -260,30 +456,6 @@ export function ContactTable({ data, totalCount, page, perPage }: ContactTablePr
           <Button variant="ghost" size="sm" className="text-sm h-7 gap-1.5"><ArrowRightLeft className="h-3.5 w-3.5" /> Change Stage</Button>
           <Button variant="ghost" size="sm" className="text-sm h-7 gap-1.5"><UserPlus className="h-3.5 w-3.5" /> Assign Owner</Button>
           <Button variant="ghost" size="sm" className="text-sm h-7 gap-1.5"><Send className="h-3.5 w-3.5" /> Add to Campaign</Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-sm h-7 gap-1.5"
-            onClick={() => {
-              const selectedRows = data.filter((r) => rowSelection[r.id])
-              exportToCSV(
-                selectedRows.map((r) => ({
-                  Name: `${r.first_name} ${r.last_name || ''}`.trim(),
-                  Company: r.company_name || '',
-                  Title: r.title || '',
-                  Email: r.email || '',
-                  Phone: r.phone || '',
-                  Stage: r.stage,
-                  Category: r.flexbone_category || '',
-                  Source: r.source || '',
-                  Owner: r.owner || '',
-                  'Last Contacted': r.last_contacted_date || '',
-                })),
-                'contacts-export',
-              )
-              toast.success(`Exported ${selectedRows.length} contacts`)
-            }}
-          ><Download className="h-3.5 w-3.5" /> Export CSV</Button>
           <Button variant="ghost" size="sm" className="text-sm h-7 gap-1.5"><Sparkles className="h-3.5 w-3.5" /> AI Research</Button>
         </div>
       )}

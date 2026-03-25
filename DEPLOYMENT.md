@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- [Cloudflare account](https://dash.cloudflare.com) with Pages enabled
+- [Cloudflare account](https://dash.cloudflare.com) with Workers enabled
 - [Supabase project](https://supabase.com) (free tier works)
 - [Anthropic API key](https://console.anthropic.com) for AI enrichment
 - Node.js 20+ and npm
@@ -23,7 +23,9 @@ Apply the database schema from `supabase/migrations/`:
 npx supabase db push --linked
 ```
 
-Or apply manually in the Supabase SQL Editor by running the migration files in order.
+Or apply manually in the Supabase SQL Editor by running the migration files in order:
+1. `001_initial_schema.sql` — Core tables (companies, contacts, activities, enrichments)
+2. `002_enrichment_config.sql` — Enrichment config table + campaign exports
 
 ### Configure authentication
 1. Go to **Authentication > Providers** in the Supabase dashboard
@@ -44,20 +46,33 @@ From **Settings > API**, copy:
 
 ---
 
-## 2. Cloudflare Pages Setup
+## 2. Cloudflare Workers Setup
 
-### Connect repository
+This project uses the [OpenNext Cloudflare adapter](https://opennext.js.org/cloudflare) to deploy the Next.js app as a Cloudflare Worker.
+
+### Option A: Git integration (recommended)
+
 1. Go to **Workers & Pages** in the Cloudflare dashboard
-2. Click **Create application > Pages > Connect to Git**
-3. Select the `FlexboneCRM` repository
-4. Configure build settings:
-   - **Build command**: `npm run pages:build`
-   - **Build output directory**: `.vercel/output/static`
+2. Click **Create** → **Import a Repository** → select the `FlexboneCRM` repo
+3. Configure build settings:
+   - **Build command**: `npm run cf:build`
+   - **Build output directory**: `.open-next`
    - **Root directory**: `flexbone-crm`
    - **Node version**: `20`
 
+### Option B: CLI deploy
+
+```bash
+# Login to Cloudflare
+npx wrangler login
+
+# Build and deploy
+npm run cf:build
+npm run cf:deploy
+```
+
 ### Environment variables
-In **Settings > Environment variables**, add:
+In **Workers > Settings > Variables**, add:
 
 | Variable | Type | Value |
 |----------|------|-------|
@@ -67,24 +82,20 @@ In **Settings > Environment variables**, add:
 | `ANTHROPIC_API_KEY` | **Encrypted** | Your Anthropic API key |
 | `NODE_VERSION` | Plain text | `20` |
 
-Set these for **both** Production and Preview environments.
-
 ---
 
 ## 3. Custom Domain (crm.flexbone.ai)
 
 ### Add domain
-1. Go to your Pages project > **Custom domains**
-2. Click **Set up a custom domain**
-3. Enter `crm.flexbone.ai`
-4. Cloudflare will auto-create the DNS record if `flexbone.ai` is on Cloudflare DNS
+1. Go to your Workers project > **Settings > Domains & Routes**
+2. Add `crm.flexbone.ai`
+3. Cloudflare will auto-create the DNS record if `flexbone.ai` is on Cloudflare DNS
 
 ### SSL/TLS
 1. Go to **SSL/TLS** in the Cloudflare dashboard (for flexbone.ai zone)
 2. Set encryption mode to **Full (strict)**
 3. Enable **Always Use HTTPS**
-4. Enable **Automatic HTTPS Rewrites**
-5. Set minimum TLS version to **1.2**
+4. Set minimum TLS version to **1.2**
 
 ---
 
@@ -110,22 +121,17 @@ Add an extra authentication layer for the CRM:
 
 ### First deploy (from CLI)
 ```bash
-# Login to Cloudflare
 npx wrangler login
-
-# Build and deploy
-npm run pages:build
-npm run pages:deploy
+npm run cf:build
+npm run cf:deploy
 ```
 
 ### Subsequent deploys
 Pushes to `main` will auto-deploy via the Git integration.
 
-Preview deployments are created for every pull request.
-
 ### Manual deploy
 ```bash
-npm run pages:build && npm run pages:deploy
+npm run cf:build && npm run cf:deploy
 ```
 
 ---
@@ -133,23 +139,33 @@ npm run pages:build && npm run pages:deploy
 ## 6. Verify Deployment
 
 ```bash
-# Health check
 curl https://crm.flexbone.ai/api/health
-
-# Expected response
-# {"status":"ok","timestamp":"...","version":"abc1234","environment":"production"}
+# Expected: {"status":"ok","timestamp":"..."}
 ```
 
 ---
 
-## 7. Monitoring
+## 7. Scripts Reference
 
-### Cloudflare analytics
-- **Web Analytics**: Enabled by default on Pages
-- **Workers Analytics**: View request counts, errors, CPU time under Workers & Pages
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Local dev server (localhost:3000) |
+| `npm run build` | Standard Next.js build |
+| `npm run cf:build` | Build for Cloudflare Workers (via OpenNext) |
+| `npm run cf:dev` | Preview locally with Wrangler |
+| `npm run cf:deploy` | Deploy to Cloudflare Workers |
 
-### Error tracking
-Check **Functions > Real-time Logs** in the Pages dashboard for server-side errors.
+---
+
+## 8. Migrating from Vercel
+
+If you're currently on Vercel:
+
+1. **Disconnect Vercel** — go to Vercel dashboard → project settings → Git → disconnect
+2. **Connect Cloudflare** — follow Option A above
+3. **Move env vars** — copy all environment variables from Vercel to Cloudflare Workers settings
+4. **Update Supabase auth** — change redirect URLs from `*.vercel.app` to `crm.flexbone.ai`
+5. **Update DNS** — point `crm.flexbone.ai` to Cloudflare Workers instead of Vercel
 
 ---
 
@@ -158,5 +174,5 @@ Check **Functions > Real-time Logs** in the Pages dashboard for server-side erro
 | Environment | Branch | URL | Supabase |
 |-------------|--------|-----|----------|
 | Production | `main` | `crm.flexbone.ai` | Production project |
-| Preview | PR branches | `*.flexbone-crm.pages.dev` | Production project (or staging) |
+| Preview | PR branches | `*.flexbone-crm.workers.dev` | Production project (or staging) |
 | Local | — | `localhost:3000` | Local or dev project |

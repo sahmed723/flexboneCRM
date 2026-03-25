@@ -2,6 +2,7 @@ import { SupabaseClient } from '@supabase/supabase-js'
 
 export interface ContactFilters {
   search?: string
+  titleSearch?: string
   stages?: string[]
   categories?: string[]
   sources?: string[]
@@ -10,6 +11,9 @@ export interface ContactFilters {
   campaignBatch?: string
   hasEmail?: 'yes' | 'no' | 'all'
   hasLinkedin?: 'yes' | 'no' | 'all'
+  contactedStatus?: 'all' | 'not_contacted' | 'contacted' | 'exported'
+  sizeMin?: number
+  sizeMax?: number
   dateImportedFrom?: string
   dateImportedTo?: string
   lastContactedFrom?: string
@@ -37,6 +41,7 @@ export interface ContactListRow {
   linkedin: string | null
   company_id: string | null
   company_name: string | null
+  company_size: number | null
 }
 
 export interface ContactDetail {
@@ -74,17 +79,53 @@ export async function fetchContacts(supabase: SupabaseClient, filters: ContactFi
   const perPage = filters.perPage || 50
   const offset = (page - 1) * perPage
 
+  // If filtering by company size, pre-fetch matching company IDs
+  let companySizeIds: string[] | null = null
+  if (filters.sizeMin !== undefined || filters.sizeMax !== undefined) {
+    let sizeQuery = supabase.from('companies').select('id')
+    if (filters.sizeMin !== undefined) {
+      sizeQuery = sizeQuery.gte('company_size', filters.sizeMin)
+    }
+    if (filters.sizeMax !== undefined) {
+      sizeQuery = sizeQuery.lte('company_size', filters.sizeMax)
+    }
+    const { data: sizeData } = await sizeQuery
+    companySizeIds = (sizeData || []).map((r: { id: string }) => r.id)
+    if (companySizeIds.length === 0) {
+      return { data: [], count: 0, error: null }
+    }
+  }
+
   let query = supabase
     .from('contacts')
     .select(
-      'id, first_name, last_name, title, email, phone, stage, flexbone_category, source, priority_tier, owner, last_contacted_date, campaign_batch, linkedin, company_id, companies!contacts_company_id_fkey(company_name)',
+      'id, first_name, last_name, title, email, phone, stage, flexbone_category, source, priority_tier, owner, last_contacted_date, campaign_batch, linkedin, company_id, companies!contacts_company_id_fkey(company_name, company_size)',
       { count: 'exact' }
     )
+
+  // Filter by company size (pre-fetched IDs)
+  if (companySizeIds) {
+    query = query.in('company_id', companySizeIds)
+  }
 
   // Search using ilike (leverages pg_trgm index)
   if (filters.search) {
     const term = `%${filters.search}%`
     query = query.or(`first_name.ilike.${term},last_name.ilike.${term},email.ilike.${term},title.ilike.${term}`)
+  }
+
+  // Title-specific search
+  if (filters.titleSearch) {
+    query = query.ilike('title', `%${filters.titleSearch}%`)
+  }
+
+  // Contacted status filter
+  if (filters.contactedStatus === 'not_contacted') {
+    query = query.eq('stage', 'new').is('last_contacted_date', null)
+  } else if (filters.contactedStatus === 'contacted') {
+    query = query.not('last_contacted_date', 'is', null)
+  } else if (filters.contactedStatus === 'exported') {
+    query = query.eq('stage', 'exported')
   }
 
   // Stage filter
@@ -164,10 +205,11 @@ export async function fetchContacts(supabase: SupabaseClient, filters: ContactFi
 
   // Flatten the company join
   const rows: ContactListRow[] = (data || []).map((row: Record<string, unknown>) => {
-    const companies = row.companies as { company_name: string } | null
+    const companies = row.companies as { company_name: string; company_size: number | null } | null
     return {
       ...(row as unknown as ContactListRow),
       company_name: companies?.company_name || null,
+      company_size: companies?.company_size ?? null,
     }
   })
 

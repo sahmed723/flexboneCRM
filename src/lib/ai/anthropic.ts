@@ -85,4 +85,23 @@ export function extractJSON(text: string): Record<string, unknown> | null {
   }
 }
 
+// Load enrichment config from Supabase with fallback defaults
+export async function loadEnrichmentConfig(supabase: { from: (table: string) => unknown }) {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data } = await (supabase.from('enrichment_config') as any)
+      .select('config_key, value')
+
+    if (!data || data.length === 0) return null
+
+    const config: Record<string, string> = {}
+    for (const row of data as { config_key: string; value: string }[]) {
+      config[row.config_key] = row.value
+    }
+    return config
+  } catch {
+    return null
+  }
+}
+
 export { MODEL }

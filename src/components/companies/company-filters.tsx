@@ -1,9 +1,10 @@
 'use client'
 
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
-import { useCallback, useTransition } from 'react'
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
 import {
   Select,
   SelectContent,
@@ -11,8 +12,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Button } from '@/components/ui/button'
-import { X } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { X, Filter } from 'lucide-react'
 
 const CATEGORIES = [
   'ASC', 'SNF', 'BPO', 'Health System', 'Insurer',
@@ -27,7 +28,7 @@ export function CompanyFilters({ states }: CompanyFiltersProps) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const [isPending, startTransition] = useTransition()
+  const [, startTransition] = useTransition()
 
   const selectedCategories = searchParams.get('categories')?.split(',').filter(Boolean) || []
   const selectedState = searchParams.get('state') || ''
@@ -67,12 +68,49 @@ export function CompanyFilters({ states }: CompanyFiltersProps) {
     })
   }
 
-  const hasActiveFilters = selectedCategories.length > 0 || selectedState || enriched !== 'all' || hasAsc !== 'all'
+  // Size inputs with debounce
+  const [sizeMinValue, setSizeMinValue] = useState('')
+  const [sizeMaxValue, setSizeMaxValue] = useState('')
+  const sizeDebounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  // Sync from URL on mount and when searchParams change
+  useEffect(() => {
+    setSizeMinValue(searchParams.get('sizeMin') || '')
+    setSizeMaxValue(searchParams.get('sizeMax') || '')
+  }, [searchParams])
+  useEffect(() => {
+    const currentMin = searchParams.get('sizeMin') || ''
+    const currentMax = searchParams.get('sizeMax') || ''
+    if (sizeMinValue === currentMin && sizeMaxValue === currentMax) return
+    if (sizeDebounceRef.current) clearTimeout(sizeDebounceRef.current)
+    sizeDebounceRef.current = setTimeout(() => updateParams({
+      sizeMin: sizeMinValue || null,
+      sizeMax: sizeMaxValue || null,
+    }), 500)
+    return () => { if (sizeDebounceRef.current) clearTimeout(sizeDebounceRef.current) }
+  }, [sizeMinValue, sizeMaxValue, searchParams, updateParams])
+
+  const filterCount = [
+    selectedCategories.length > 0,
+    !!selectedState,
+    enriched !== 'all',
+    hasAsc !== 'all',
+    searchParams.has('sizeMin') || searchParams.has('sizeMax'),
+  ].filter(Boolean).length
+
+  const hasActiveFilters = filterCount > 0
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-[#1A1A2E]">Filters</h3>
+        <div className="flex items-center gap-2">
+          <Filter className="h-3.5 w-3.5 text-[#6B7280]" />
+          <h3 className="text-sm font-semibold text-[#1A1A2E]">Filters</h3>
+          {hasActiveFilters && (
+            <Badge variant="secondary" className="h-5 min-w-5 px-1.5 text-[10px] font-bold bg-[#F5C518] text-[#0A0A0A]">
+              {filterCount}
+            </Badge>
+          )}
+        </div>
         {hasActiveFilters && (
           <button onClick={clearAll} className="text-xs text-[#6B7280] hover:text-[#0A0A0A] flex items-center gap-1">
             <X className="h-3 w-3" />
@@ -127,6 +165,27 @@ export function CompanyFilters({ states }: CompanyFiltersProps) {
             <SelectItem value="no">Not enriched</SelectItem>
           </SelectContent>
         </Select>
+      </div>
+
+      {/* Company Size Range */}
+      <div className="space-y-2">
+        <Label className="text-xs font-medium text-[#6B7280] uppercase tracking-wide">Employee Count</Label>
+        <div className="grid grid-cols-2 gap-2">
+          <Input
+            type="number"
+            value={sizeMinValue}
+            onChange={(e) => setSizeMinValue(e.target.value)}
+            placeholder="Min"
+            className="h-9 text-sm"
+          />
+          <Input
+            type="number"
+            value={sizeMaxValue}
+            onChange={(e) => setSizeMaxValue(e.target.value)}
+            placeholder="Max"
+            className="h-9 text-sm"
+          />
+        </div>
       </div>
 
       {/* Has ASC */}

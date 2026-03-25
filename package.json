@@ -8,9 +8,12 @@
     "start": "next start",
     "lint": "eslint",
     "migrate": "npx tsx src/scripts/migrate.ts",
-    "pages:build": "npx @cloudflare/next-on-pages",
-    "pages:dev": "npx wrangler pages dev .vercel/output/static --compatibility-flag=nodejs_compat",
-    "pages:deploy": "npx wrangler pages deploy .vercel/output/static"
+    "cf:build": "npx opennextjs-cloudflare build",
+    "cf:dev": "npx opennextjs-cloudflare preview",
+    "cf:deploy": "npx opennextjs-cloudflare deploy",
+    "pages:build": "npx opennextjs-cloudflare build",
+    "pages:dev": "npx opennextjs-cloudflare preview",
+    "pages:deploy": "npx opennextjs-cloudflare deploy"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
@@ -32,6 +35,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@opennextjs/cloudflare": "^1.17.3",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

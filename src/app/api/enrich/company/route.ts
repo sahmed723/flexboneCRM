@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { complete, extractJSON, MODEL } from '@/lib/ai/anthropic'
+import { complete, extractJSON, MODEL, loadEnrichmentConfig } from '@/lib/ai/anthropic'
 import { authenticateRequest, isAuthError } from '@/lib/api-auth'
 import type { Company } from '@/lib/supabase/types'
 
 export const runtime = 'edge'
 
-const SYSTEM_PROMPT = `You are a healthcare sales intelligence analyst for Flexbone.ai, a company that builds AI agents for healthcare operations (prior authorization, insurance verification, RCM, patient coordination). Research the following healthcare facility and provide comprehensive intelligence for our sales team.
+const DEFAULT_SYSTEM_PROMPT = `You are a healthcare sales intelligence analyst for Flexbone.ai, a company that builds AI agents for healthcare operations (prior authorization, insurance verification, RCM, patient coordination). Research the following healthcare facility and provide comprehensive intelligence for our sales team.
 
 Return a JSON object with these exact fields:
 {
@@ -121,6 +121,13 @@ export async function POST(request: NextRequest) {
 
     const jobId = (job as { id: string } | null)?.id
 
+    // Load configurable prompt from DB
+    const config = await loadEnrichmentConfig(supabase)
+    const systemPrompt = config?.company_enrichment_prompt || DEFAULT_SYSTEM_PROMPT
+    const model = config?.enrichment_model || MODEL
+    const temperature = config?.enrichment_temperature ? parseFloat(config.enrichment_temperature) : 0.3
+    const maxTokens = config?.enrichment_max_tokens ? parseInt(config.enrichment_max_tokens) : 4096
+
     // Build context prompt
     const contextParts = [
       `Company Name: ${co.company_name}`,
@@ -143,10 +150,10 @@ export async function POST(request: NextRequest) {
 
     // Call Claude
     const result = await complete({
-      system: SYSTEM_PROMPT,
+      system: systemPrompt,
       prompt,
-      maxTokens: 4096,
-      temperature: 0.3,
+      maxTokens,
+      temperature,
     })
 
     const enrichmentData = extractJSON(result.text)

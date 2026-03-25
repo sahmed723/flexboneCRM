@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
-import { useCallback, useTransition } from 'react'
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
@@ -13,7 +13,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { X } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { X, Filter } from 'lucide-react'
 
 const STAGES = [
   { value: 'new', label: 'New' },
@@ -85,20 +86,122 @@ export function ContactFilters({ owners, campaignBatches }: ContactFiltersProps)
     startTransition(() => { router.push(pathname) })
   }
 
-  const hasFilters = selectedStages.length > 0 || selectedCategories.length > 0 ||
-    selectedSources.length > 0 || searchParams.has('owner') || searchParams.has('priorityTier') ||
-    searchParams.has('campaignBatch') || searchParams.has('hasEmail') || searchParams.has('hasLinkedin')
+  // Title search with debounce
+  const [titleValue, setTitleValue] = useState('')
+  const titleDebounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  // Sync from URL on mount and when searchParams change
+  useEffect(() => { setTitleValue(searchParams.get('titleSearch') || '') }, [searchParams])
+  useEffect(() => {
+    const current = searchParams.get('titleSearch') || ''
+    if (titleValue === current) return
+    if (titleDebounceRef.current) clearTimeout(titleDebounceRef.current)
+    titleDebounceRef.current = setTimeout(() => updateParams({ titleSearch: titleValue || null }), 300)
+    return () => { if (titleDebounceRef.current) clearTimeout(titleDebounceRef.current) }
+  }, [titleValue, searchParams, updateParams])
+
+  // Size inputs with debounce
+  const [sizeMinValue, setSizeMinValue] = useState('')
+  const [sizeMaxValue, setSizeMaxValue] = useState('')
+  const sizeDebounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  // Sync from URL on mount and when searchParams change
+  useEffect(() => {
+    setSizeMinValue(searchParams.get('sizeMin') || '')
+    setSizeMaxValue(searchParams.get('sizeMax') || '')
+  }, [searchParams])
+  useEffect(() => {
+    const currentMin = searchParams.get('sizeMin') || ''
+    const currentMax = searchParams.get('sizeMax') || ''
+    if (sizeMinValue === currentMin && sizeMaxValue === currentMax) return
+    if (sizeDebounceRef.current) clearTimeout(sizeDebounceRef.current)
+    sizeDebounceRef.current = setTimeout(() => updateParams({
+      sizeMin: sizeMinValue || null,
+      sizeMax: sizeMaxValue || null,
+    }), 500)
+    return () => { if (sizeDebounceRef.current) clearTimeout(sizeDebounceRef.current) }
+  }, [sizeMinValue, sizeMaxValue, searchParams, updateParams])
+
+  const filterCount = [
+    selectedStages.length > 0,
+    selectedCategories.length > 0,
+    selectedSources.length > 0,
+    searchParams.has('owner'),
+    searchParams.has('priorityTier'),
+    searchParams.has('campaignBatch'),
+    searchParams.has('hasEmail') && searchParams.get('hasEmail') !== 'all',
+    searchParams.has('hasLinkedin') && searchParams.get('hasLinkedin') !== 'all',
+    searchParams.has('titleSearch'),
+    searchParams.has('contactedStatus') && searchParams.get('contactedStatus') !== 'all',
+    searchParams.has('sizeMin') || searchParams.has('sizeMax'),
+    searchParams.has('dateImportedFrom') || searchParams.has('dateImportedTo'),
+    searchParams.has('lastContactedFrom') || searchParams.has('lastContactedTo'),
+  ].filter(Boolean).length
+
+  const hasFilters = filterCount > 0
 
   return (
     <ScrollArea className="h-[calc(100vh-220px)]">
       <div className="space-y-5 pr-3">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-[#1A1A2E]">Filters</h3>
+          <div className="flex items-center gap-2">
+            <Filter className="h-3.5 w-3.5 text-[#6B7280]" />
+            <h3 className="text-sm font-semibold text-[#1A1A2E]">Filters</h3>
+            {hasFilters && (
+              <Badge variant="secondary" className="h-5 min-w-5 px-1.5 text-[10px] font-bold bg-[#F5C518] text-[#0A0A0A]">
+                {filterCount}
+              </Badge>
+            )}
+          </div>
           {hasFilters && (
             <button onClick={clearAll} className="text-xs text-[#6B7280] hover:text-[#0A0A0A] flex items-center gap-1">
               <X className="h-3 w-3" /> Clear
             </button>
           )}
+        </div>
+
+        {/* Title Search */}
+        <div className="space-y-2">
+          <Label className="text-xs font-medium text-[#6B7280] uppercase tracking-wide">Role / Title</Label>
+          <Input
+            value={titleValue}
+            onChange={(e) => setTitleValue(e.target.value)}
+            placeholder='e.g. "revenue cycle"'
+            className="h-8 text-sm"
+          />
+        </div>
+
+        {/* Contacted Status */}
+        <div className="space-y-2">
+          <Label className="text-xs font-medium text-[#6B7280] uppercase tracking-wide">Contacted Status</Label>
+          <Select value={searchParams.get('contactedStatus') || 'all'} onValueChange={(v) => updateParams({ contactedStatus: v })}>
+            <SelectTrigger className="w-full h-8 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="not_contacted">Not yet contacted</SelectItem>
+              <SelectItem value="contacted">Contacted</SelectItem>
+              <SelectItem value="exported">Exported</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Employee Count Range */}
+        <div className="space-y-2">
+          <Label className="text-xs font-medium text-[#6B7280] uppercase tracking-wide">Company Size</Label>
+          <div className="grid grid-cols-2 gap-2">
+            <Input
+              type="number"
+              value={sizeMinValue}
+              onChange={(e) => setSizeMinValue(e.target.value)}
+              placeholder="Min"
+              className="h-8 text-xs"
+            />
+            <Input
+              type="number"
+              value={sizeMaxValue}
+              onChange={(e) => setSizeMaxValue(e.target.value)}
+              placeholder="Max"
+              className="h-8 text-xs"
+            />
+          </div>
         </div>
 
         {/* Stage */}

@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { complete, MODEL } from '@/lib/ai/anthropic'
+import { complete, MODEL, loadEnrichmentConfig } from '@/lib/ai/anthropic'
 import { authenticateRequest, isAuthError } from '@/lib/api-auth'
 
 export const runtime = 'edge'
 
-const SYSTEM_PROMPT = `You are a healthcare sales intelligence analyst for Flexbone.ai. We build AI agents for healthcare operations (prior authorization, insurance verification, RCM, patient coordination).
+const DEFAULT_SYSTEM_PROMPT = `You are a healthcare sales intelligence analyst for Flexbone.ai. We build AI agents for healthcare operations (prior authorization, insurance verification, RCM, patient coordination).
 
 Research the following contact and provide actionable intelligence for our sales team. Your analysis should help a sales rep understand this person's role, pain points, and the best way to approach them.
 
@@ -101,13 +101,19 @@ export async function POST(request: NextRequest) {
       company?.short_description ? `Company Description: ${company.short_description}` : null,
     ].filter(Boolean)
 
+    // Load configurable prompt from DB
+    const config = await loadEnrichmentConfig(supabase)
+    const systemPrompt = config?.contact_research_prompt || DEFAULT_SYSTEM_PROMPT
+    const temperature = config?.enrichment_temperature ? parseFloat(config.enrichment_temperature) : 0.3
+    const maxTokens = config?.enrichment_max_tokens ? parseInt(config.enrichment_max_tokens) : 4096
+
     const prompt = `Research this healthcare contact and provide sales intelligence:\n\n${contextParts.join('\n')}`
 
     const result = await complete({
-      system: SYSTEM_PROMPT,
+      system: systemPrompt,
       prompt,
-      maxTokens: 4096,
-      temperature: 0.3,
+      maxTokens,
+      temperature,
     })
 
     // Save as enrichment activity

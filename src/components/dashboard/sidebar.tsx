@@ -13,6 +13,7 @@ import {
   Megaphone,
   Activity,
   Settings,
+  Upload,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react'
@@ -23,6 +24,7 @@ const NAV_ITEMS = [
   { label: 'Contacts', href: '/dashboard/contacts', icon: Users },
   { label: 'Pipeline', href: '/dashboard/pipeline', icon: GitBranch },
   { label: 'Enrichment', href: '/dashboard/enrichment', icon: Sparkles },
+  { label: 'Import', href: '/dashboard/import', icon: Upload },
   { label: 'Campaigns', href: '/dashboard/campaigns', icon: Megaphone },
   { label: 'Activities', href: '/dashboard/activities', icon: Activity },
   { label: 'Settings', href: '/dashboard/settings', icon: Settings },
